@@ -176,7 +176,7 @@ public final class MoltaClient {
     }
 
     func fetchManifest() async throws -> Manifest {
-        var req = URLRequest(url: baseURL.appendingPathComponent("/api/sdk/manifest"))
+        var req = URLRequest(url: baseURL.appendingPathComponent("/api/v1/sdk/manifest"))
         req.setValue(accessCode, forHTTPHeaderField: "X-Access-Code")
         req.cachePolicy = .reloadIgnoringLocalCacheData
 
