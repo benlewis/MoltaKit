@@ -158,19 +158,38 @@ public final class MoltaClient {
             throw MoltaError.appOutOfDate(required: manifest.schemaVersion,
                                                 supported: supportedSchemaVersion)
         }
+        // Serve cache hits immediately; download the rest concurrently (bounded)
+        // so a large portal doesn't sync one slow file at a time.
         var results: [SyncedAsset] = []
+        var toDownload: [ManifestEntry] = []
         for entry in manifest.assets {
             if cache.isCurrent(entry), let url = cache.fileURL(forKey: entry.key) {
                 results.append(SyncedAsset(key: entry.key, name: entry.name, type: entry.type,
                                            version: entry.version, localURL: url,
                                            metadata: entry.metadata, didUpdate: false))
-                continue
+            } else {
+                toDownload.append(entry)
             }
-            let data = try await download(entry)
-            let url = try cache.store(data, for: entry)
-            results.append(SyncedAsset(key: entry.key, name: entry.name, type: entry.type,
-                                       version: entry.version, localURL: url,
-                                       metadata: entry.metadata, didUpdate: true))
+        }
+
+        // Download concurrently (bounded) but write to the cache serially on this
+        // task — AssetCache holds mutable state and isn't safe for parallel writes.
+        let maxConcurrent = 6
+        try await withThrowingTaskGroup(of: (ManifestEntry, Data).self) { group in
+            var index = 0
+            func addTask(_ entry: ManifestEntry) {
+                group.addTask { (entry, try await self.download(entry)) }
+            }
+            while index < min(maxConcurrent, toDownload.count) {
+                addTask(toDownload[index]); index += 1
+            }
+            while let (entry, data) = try await group.next() {
+                let url = try cache.store(data, for: entry)
+                results.append(SyncedAsset(key: entry.key, name: entry.name, type: entry.type,
+                                           version: entry.version, localURL: url,
+                                           metadata: entry.metadata, didUpdate: true))
+                if index < toDownload.count { addTask(toDownload[index]); index += 1 }
+            }
         }
         return results
     }
