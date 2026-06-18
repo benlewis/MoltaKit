@@ -9,13 +9,20 @@ on launch — no Auth0 login required in the app.
 
 ## Install (Swift Package Manager)
 
-In Xcode: **File ▸ Add Package Dependencies…** and point at this repo, or add to
-your `Package.swift`:
+In Xcode: **File ▸ Add Package Dependencies…**, paste the URL below, and add the
+`MoltaKit` product to your target. Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/you/molta", from: "0.1.0")
-// then add "MoltaKit" to your target's dependencies
+dependencies: [
+    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.1.0"),
+],
+targets: [
+    .target(name: "MyGame", dependencies: ["MoltaKit"]),
+]
 ```
+
+> Versions are git tags on that repo (semver). `from: "0.1.0"` picks up
+> compatible updates automatically.
 
 ## Usage
 
