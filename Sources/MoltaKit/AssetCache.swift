@@ -44,8 +44,7 @@ final class AssetCache {
     }
 
     func store(_ data: Data, for manifest: ManifestEntry) throws -> URL {
-        let ext = (manifest.url as NSString).pathExtension.isEmpty
-            ? Self.ext(forMime: manifest.mimeType) : (manifest.url as NSString).pathExtension
+        let ext = Self.fileExtension(for: manifest)
         let fileName = ext.isEmpty ? manifest.key : "\(manifest.key).\(ext)"
         let url = directory.appendingPathComponent(fileName)
         try data.write(to: url, options: .atomic)
@@ -58,6 +57,15 @@ final class AssetCache {
         if let data = try? JSONEncoder().encode(state) {
             try? data.write(to: stateURL, options: .atomic)
         }
+    }
+
+    /// File extension for a manifest entry: from the URL's *path* (never the
+    /// query string — presigned URLs carry long ?X-Amz-… params), falling back
+    /// to the MIME type. Sanitized so it's always a safe filename suffix.
+    static func fileExtension(for manifest: ManifestEntry) -> String {
+        let fromURL = URL(string: manifest.url)?.pathExtension ?? ""
+        let safe = !fromURL.isEmpty && fromURL.count <= 5 && fromURL.allSatisfy { $0.isLetter || $0.isNumber }
+        return safe ? fromURL.lowercased() : ext(forMime: manifest.mimeType)
     }
 
     static func ext(forMime mime: String?) -> String {

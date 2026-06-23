@@ -58,6 +58,22 @@ final class MoltaKitTests: XCTestCase {
         XCTAssertEqual(AssetCache.ext(forMime: "application/octet-stream"), "")
     }
 
+    func testExtensionIgnoresPresignedQuery() {
+        // Presigned R2/S3 URLs carry a long ?X-Amz-… query — the extension must
+        // come from the path only, never include the query (which broke filenames).
+        let entry = ManifestEntry(
+            key: "snake3_saddle_blink", name: "Saddle", type: "image", version: 3,
+            checksum: "abc", size: 10, mimeType: "image/png",
+            url: "https://acct.r2.cloudflarestorage.com/asset-storage/x/snake3_saddle_blink.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=deadbeef",
+            metadata: [:], updatedAt: "now"
+        )
+        XCTAssertEqual(AssetCache.fileExtension(for: entry), "png")
+
+        let cache = AssetCache(accessCode: "test\(Int.random(in: 0...99999))")
+        let url = try? cache.store(Data([0, 1, 2, 3]), for: entry)
+        XCTAssertEqual(url?.lastPathComponent, "snake3_saddle_blink.png")
+    }
+
     func testBakedManifestDecoding() throws {
         let json = """
         {
