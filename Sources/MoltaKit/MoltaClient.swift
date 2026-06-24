@@ -76,15 +76,20 @@ public final class MoltaClient {
         self.mode = MoltaClient.resolve(mode)
     }
 
+    /// True when running as a TestFlight build (its App Store receipt is a
+    /// sandbox receipt). App Store builds have a "receipt"; dev builds have none.
+    static var isTestFlight: Bool {
+        Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+    }
+
     static func resolve(_ mode: MoltaMode) -> MoltaMode {
         guard mode == .automatic else { return mode }
-        // MOLTA_LIVE forces live downloads even in a release build (e.g. a
-        // TestFlight build that should keep pulling the latest assets), so the
-        // flag alone is enough — no need to also pass `mode: .development`.
         #if DEBUG || MOLTA_LIVE
         return .development
         #else
-        return .production
+        // Release: TestFlight pulls live so testers get the latest assets;
+        // the App Store build uses the baked, bundled assets (no network).
+        return isTestFlight ? .development : .production
         #endif
     }
 
@@ -93,21 +98,16 @@ public final class MoltaClient {
     /// assets — no network. Returns every asset now available locally.
     @discardableResult
     public func sync() async throws -> [SyncedAsset] {
-        // The downloader is compiled out of production builds. Define the
-        // MOLTA_LIVE compilation flag to force it on in a release build
-        // (e.g. a TestFlight build that should still pull live updates).
-        #if DEBUG || MOLTA_LIVE
+        // Development (DEBUG / TestFlight / MOLTA_LIVE) downloads from the portal;
+        // production loads the baked, bundled assets.
         if mode == .development { return try await developmentSync() }
-        #endif
         return try loadBaked()
     }
 
     /// Local file URL for an asset: the downloaded cache (development) or the
     /// bundled baked file (production). Returns nil if not available.
     public func localURL(forKey key: String) -> URL? {
-        #if DEBUG || MOLTA_LIVE
         if mode == .development { return cache.fileURL(forKey: key) }
-        #endif
         if !bakedLoaded { _ = try? loadBaked() }
         return bakedURLs[key]
     }
@@ -150,8 +150,7 @@ public final class MoltaClient {
         return bundle.url(forResource: name, withExtension: ext)
     }
 
-    // MARK: - Networking (development / test builds only)
-    #if DEBUG || MOLTA_LIVE
+    // MARK: - Networking (development / TestFlight)
 
     /// Fetch the published manifest and download new/changed assets.
     private func developmentSync() async throws -> [SyncedAsset] {
@@ -224,6 +223,4 @@ public final class MoltaClient {
         }
         return data
     }
-
-    #endif // DEBUG || MOLTA_LIVE
 }

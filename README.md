@@ -14,14 +14,14 @@ In Xcode: **File ▸ Add Package Dependencies…**, paste the URL below, and add
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.2.3"),
+    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.3.0"),
 ],
 targets: [
     .target(name: "MyGame", dependencies: ["MoltaKit"]),
 ]
 ```
 
-> Versions are git tags on that repo (semver). `from: "0.2.3"` picks up
+> Versions are git tags on that repo (semver). `from: "0.3.0"` picks up
 > compatible updates automatically.
 
 ## Usage
@@ -67,17 +67,18 @@ or portal dependency.
 | --- | --- |
 | `.development` | `sync()` downloads the latest published assets from the portal. |
 | `.production` | `sync()` loads assets baked into the app bundle; no network. |
-| `.automatic` (default) | `.development` on **DEBUG** builds, `.production` otherwise. |
+| `.automatic` (default) | `.development` on **DEBUG** *and* **TestFlight** builds; `.production` on App Store builds. |
 
-So with the default, your debug builds pull live updates and your **release**
-builds use the baked assets — automatically. Override when needed:
+So with the default: debug **and TestFlight** builds pull live updates, and your
+**App Store** build uses the baked assets — automatically, no flags. TestFlight is
+detected at runtime from the App Store sandbox receipt. Override when needed:
 
 ```swift
 let portal = MoltaClient(baseURL: url, accessCode: "428193", mode: .production)
 ```
 
-> TestFlight/Ad-hoc builds compile in Release (`.production`). If you want a test
-> build to keep downloading, pass `mode: .development` behind your own build flag.
+> No env var or build flag is needed for TestFlight to download. (`MOLTA_LIVE`
+> still forces development even on an App Store build, if you ever want that.)
 
 ### Baking for production
 1. Confirm you're ready, then bake (mark every asset **Done** first):
@@ -89,13 +90,12 @@ let portal = MoltaClient(baseURL: url, accessCode: "428193", mode: .production)
    generated `MoltaBaked.swift`** into the `MoltaBaked/` folder.
 2. Drag `MoltaBaked` into your Xcode app target (a **group** so the `.swift`
    compiles and the files bundle).
-3. Ship. Two levels of "no network in production":
+3. Ship. On an App Store build `.automatic` resolves to `.production`, so
+   `sync()` / `localURL(forKey:)` resolve to the bundled baked files and never
+   touch the network. If you also want **zero networking code** in the shipped
+   binary:
 
-   **(a) Keep MoltaKit linked** — in release builds the downloader is
-   already compiled out (`#if DEBUG || MOLTA_LIVE`), so `sync()` /
-   `localURL(forKey:)` just resolve to the bundled files.
-
-   **(b) Exclude the library entirely** — use the generated accessor, which has
+   **Exclude the library entirely** — use the generated accessor, which has
    zero dependencies, and only import MoltaKit in DEBUG:
    ```swift
    #if DEBUG
@@ -110,12 +110,10 @@ let portal = MoltaClient(baseURL: url, accessCode: "428193", mode: .production)
    Link the MoltaKit package **only in your Debug configuration** and the
    release binary contains none of it.
 
-> **`MOLTA_LIVE`** (env-based): set the environment variable `MOLTA_LIVE=1` when
-> building and the package compiles the downloader in and forces `.development`
-> — even in a release/TestFlight build that should keep pulling live updates.
-> Unset, the downloader is compiled out (production/baked). In Xcode add it under
-> **Scheme ▸ Run/Archive ▸ Pre-actions** or your CI env; on the CLI:
-> `MOLTA_LIVE=1 xcodebuild …`.
+> **`MOLTA_LIVE`** (optional, env-based): TestFlight already downloads live
+> automatically, so you rarely need this. Setting `MOLTA_LIVE=1` at build time
+> forces `.development` even on an **App Store** build — useful only for special
+> cases. On the CLI: `MOLTA_LIVE=1 xcodebuild …`.
 
 ## Schema versioning (don't let old apps break)
 
