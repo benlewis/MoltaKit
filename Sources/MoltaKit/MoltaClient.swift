@@ -78,7 +78,10 @@ public final class MoltaClient {
 
     static func resolve(_ mode: MoltaMode) -> MoltaMode {
         guard mode == .automatic else { return mode }
-        #if DEBUG
+        // MOLTA_LIVE forces live downloads even in a release build (e.g. a
+        // TestFlight build that should keep pulling the latest assets), so the
+        // flag alone is enough — no need to also pass `mode: .development`.
+        #if DEBUG || MOLTA_LIVE
         return .development
         #else
         return .production

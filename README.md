@@ -14,14 +14,14 @@ In Xcode: **File ▸ Add Package Dependencies…**, paste the URL below, and add
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.2.1"),
+    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.2.2"),
 ],
 targets: [
     .target(name: "MyGame", dependencies: ["MoltaKit"]),
 ]
 ```
 
-> Versions are git tags on that repo (semver). `from: "0.2.1"` picks up
+> Versions are git tags on that repo (semver). `from: "0.2.2"` picks up
 > compatible updates automatically.
 
 ## Usage
