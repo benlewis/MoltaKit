@@ -14,14 +14,14 @@ In Xcode: **File ▸ Add Package Dependencies…**, paste the URL below, and add
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.2.2"),
+    .package(url: "https://github.com/benlewis/MoltaKit.git", from: "0.2.3"),
 ],
 targets: [
     .target(name: "MyGame", dependencies: ["MoltaKit"]),
 ]
 ```
 
-> Versions are git tags on that repo (semver). `from: "0.2.2"` picks up
+> Versions are git tags on that repo (semver). `from: "0.2.3"` picks up
 > compatible updates automatically.
 
 ## Usage
@@ -110,8 +110,12 @@ let portal = MoltaClient(baseURL: url, accessCode: "428193", mode: .production)
    Link the MoltaKit package **only in your Debug configuration** and the
    release binary contains none of it.
 
-> **`MOLTA_LIVE`**: define this compilation flag to force the downloader on
-> in a release build (e.g. a TestFlight build that should still pull live updates).
+> **`MOLTA_LIVE`** (env-based): set the environment variable `MOLTA_LIVE=1` when
+> building and the package compiles the downloader in and forces `.development`
+> — even in a release/TestFlight build that should keep pulling live updates.
+> Unset, the downloader is compiled out (production/baked). In Xcode add it under
+> **Scheme ▸ Run/Archive ▸ Pre-actions** or your CI env; on the CLI:
+> `MOLTA_LIVE=1 xcodebuild …`.
 
 ## Schema versioning (don't let old apps break)
 
