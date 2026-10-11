@@ -57,6 +57,25 @@ if let wav = portal.data(forKey: "laser_shot") {
 3. Unchanged assets are skipped, so repeat launches are cheap and offline-friendly
    (the cache persists between runs).
 
+### Live updates while the app is running
+On iOS/tvOS the client automatically re-syncs when the app returns to the
+foreground (throttled; development mode only — disable with
+`autoResyncOnForeground: false`). When a sync downloads changes it posts
+`MoltaClient.assetsDidChangeNotification` on the main thread with the updated
+keys, so a running game can swap textures without a relaunch:
+
+```swift
+NotificationCenter.default.addObserver(
+    forName: MoltaClient.assetsDidChangeNotification, object: nil, queue: .main
+) { note in
+    let keys = note.userInfo?["keys"] as? [String] ?? []
+    reloadTextures(for: keys)   // re-read portal.localURL(forKey:) for each
+}
+```
+
+Without this, new uploads only arrive on the next cold launch — and iOS keeps
+apps warm for a long time, which looks like "my upload never shows up".
+
 ## Development vs. production
 
 The over-the-air downloader is for **DEV/TEST** builds only. For production you

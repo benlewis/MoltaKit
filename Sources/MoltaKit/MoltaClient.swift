@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public enum MoltaError: Error, LocalizedError {
     case invalidAccessCode
@@ -40,10 +43,17 @@ public enum MoltaError: Error, LocalizedError {
 /// if let hero = portal.localURL(forKey: "hero_idle") { /* load from disk */ }
 /// ```
 public final class MoltaClient {
+    /// Posted after a sync that downloaded new/changed assets, on the main
+    /// thread. `userInfo["keys"]` is `[String]` — the updated asset keys.
+    /// Observe it to reload textures/sounds while the game is running.
+    public static let assetsDidChangeNotification = Notification.Name("MoltaAssetsDidChange")
+
     private let baseURL: URL
     private let accessCode: String
     private let session: URLSession
     private let cache: AssetCache
+    private var lastSyncAt: Date?
+    private var foregroundObserver: NSObjectProtocol?
 
     /// Resolved mode (`.automatic` collapses to `.development`/`.production`).
     public let mode: MoltaMode
@@ -64,7 +74,8 @@ public final class MoltaClient {
         mode: MoltaMode = .automatic,
         bundle: Bundle = .main,
         bakedSubdirectory: String? = "MoltaBaked",
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        autoResyncOnForeground: Bool = true
     ) {
         self.baseURL = baseURL
         self.accessCode = accessCode
@@ -74,6 +85,28 @@ public final class MoltaClient {
         self.bundle = bundle
         self.bakedSubdirectory = bakedSubdirectory
         self.mode = MoltaClient.resolve(mode)
+        if autoResyncOnForeground { startForegroundResync() }
+    }
+
+    deinit {
+        if let observer = foregroundObserver { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    /// Development mode on iOS/tvOS: re-sync whenever the app returns to the
+    /// foreground, so a contractor's fresh upload appears without waiting for a
+    /// cold launch. Throttled so rapid app-switching doesn't hammer the portal;
+    /// changes are announced via `assetsDidChangeNotification`.
+    private func startForegroundResync() {
+        guard mode == .development else { return }
+        #if canImport(UIKit) && !os(watchOS)
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            if let last = self.lastSyncAt, Date().timeIntervalSince(last) < 15 { return }
+            Task { try? await self.sync() }
+        }
+        #endif
     }
 
     /// True when running as a TestFlight build (its App Store receipt is a
@@ -100,6 +133,7 @@ public final class MoltaClient {
     public func sync() async throws -> [SyncedAsset] {
         // Development (DEBUG / TestFlight / MOLTA_LIVE) downloads from the portal;
         // production loads the baked, bundled assets.
+        lastSyncAt = Date()
         if mode == .development { return try await developmentSync() }
         return try loadBaked()
     }
@@ -191,6 +225,15 @@ public final class MoltaClient {
                                            version: entry.version, localURL: url,
                                            metadata: entry.metadata, didUpdate: true))
                 if index < toDownload.count { addTask(toDownload[index]); index += 1 }
+            }
+        }
+
+        // Tell the running game something changed so it can reload textures.
+        let updatedKeys = results.filter(\.didUpdate).map(\.key)
+        if !updatedKeys.isEmpty {
+            DispatchQueue.main.async { [updatedKeys] in
+                NotificationCenter.default.post(name: MoltaClient.assetsDidChangeNotification,
+                                                object: nil, userInfo: ["keys": updatedKeys])
             }
         }
         return results
